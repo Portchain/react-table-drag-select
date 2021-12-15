@@ -51,3 +51,9 @@
   /* This is the blue color you see when you select text with the cursor */
   background-color: #3F83D5;
 }
+
+/* Cells that are being hovered */
+.table-drag-select td.cell-hovered {
+  /* This is the blue color you see when you select text with the cursor */
+  background-color: #EEE;
+}

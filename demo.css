@@ -68,6 +68,10 @@ button {
   background-color: #EACA96;
 }
 
+.table-drag-select td.cell-hovered {
+  background-color: #F6E1CD;
+}
+
 .table-drag-select tr:first-child td {
   /* Remove empty space at top of table */
   border-top: 0;

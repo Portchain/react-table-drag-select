@@ -28,6 +28,11 @@ export default class TableDragSelect extends React.Component {
     },
     maxRows: PropTypes.number,
     maxColumns: PropTypes.number,
+    granularityRows: PropTypes.number,
+    granularityColumns: PropTypes.number,
+    granularityRowsOffset: PropTypes.number,
+    granularityColumnsOffset: PropTypes.number,
+    granularityFollowsTarget: PropTypes.bool,
     onSelectionStart: PropTypes.func,
     onInput: PropTypes.func,
     onChange: PropTypes.func,
@@ -60,8 +65,21 @@ export default class TableDragSelect extends React.Component {
 
   static defaultProps = {
     value: [],
+    // maximum number of rows to select at once
     maxRows: Infinity,
+    // maximum number of columns to select at once
     maxColumns: Infinity,
+    // how many rows to select at once
+    granularityRows: 1,
+    // how many columns to select at once
+    granularityColumns: 1,
+    // offset the row selection by N rows
+    granularityRowsOffset: 0,
+    // offset the column selection by N rows
+    granularityColumnsOffset: 0,
+    // if true, set the selection to the reverse of the target/clicked cell
+    // if false, set the selection to the reverse of top/left cell of the selection
+    granularityFollowsTarget: true,
     onSelectionStart: () => {},
     onInput: () => {},
     onChange: () => {}
@@ -69,11 +87,18 @@ export default class TableDragSelect extends React.Component {
 
   state = {
     selectionStarted: false,
+    hoverStarted: false,
+    targetRow: null,
+    targetColumn: null,
     startRow: null,
     startColumn: null,
     endRow: null,
     endColumn: null,
-    addMode: null
+    addMode: null,
+    hoverStartRow: null,
+    hoverStartColumn: null,
+    hoverEndRow: null,
+    hoverEndColumn: null
   };
 
   componentDidMount = () => {
@@ -89,7 +114,9 @@ export default class TableDragSelect extends React.Component {
   render = () => {
     return (
       <table className="table-drag-select">
-        <tbody>{this.renderRows()}</tbody>
+        <tbody>
+          {this.renderRows()}
+        </tbody>
       </table>
     );
   };
@@ -98,18 +125,21 @@ export default class TableDragSelect extends React.Component {
     React.Children.map(this.props.children, (tr, i) => {
       return (
         <tr key={i} {...tr.props}>
-          {React.Children.map(tr.props.children, (cell, j) => (
+          {React.Children.map(tr.props.children, (cell, j) =>
             <Cell
               key={j}
               onTouchStart={this.handleTouchStartCell}
               onTouchMove={this.handleTouchMoveCell}
+              onMouseEnter={this.onMouseEnter}
+              onMouseLeave={this.onMouseLeave}
               selected={this.props.value[i][j]}
+              hovered={this.isCellBeingHovered(i, j)}
               beingSelected={this.isCellBeingSelected(i, j)}
               {...cell.props}
             >
               {cell.props.children}
             </Cell>
-          ))}
+          )}
         </tr>
       );
     });
@@ -119,15 +149,25 @@ export default class TableDragSelect extends React.Component {
     const isTouch = e.type !== "mousedown";
     if (!this.state.selectionStarted && (isLeftClick || isTouch)) {
       e.preventDefault();
-      const { row, column } = eventToCellLocation(e);
-      this.props.onSelectionStart({ row, column });
+      const { row: targetRow, column: targetColumn } = eventToCellLocation(e);
+      const {
+        startRow,
+        endRow,
+        startColumn,
+        endColumn
+      } = cellLocationByGranularity(eventToCellLocation(e), this.props);
+      this.props.onSelectionStart({ startRow, startColumn });
       this.setState({
         selectionStarted: true,
-        startRow: row,
-        startColumn: column,
-        endRow: row,
-        endColumn: column,
-        addMode: !this.props.value[row][column]
+        targetRow,
+        targetColumn,
+        startRow,
+        startColumn,
+        endRow,
+        endColumn,
+        addMode: this.props.granularityFollowsTarget
+          ? !this.props.value[targetRow][targetColumn]
+          : !this.props.value[startRow][startColumn]
       });
     }
   };
@@ -135,25 +175,33 @@ export default class TableDragSelect extends React.Component {
   handleTouchMoveCell = e => {
     if (this.state.selectionStarted) {
       e.preventDefault();
-      const { row, column } = eventToCellLocation(e);
-      const { startRow, startColumn, endRow, endColumn } = this.state;
+      const { endRow, endColumn } = cellLocationByGranularity(
+        eventToCellLocation(e),
+        this.props
+      );
+      const {
+        startRow: stateStartRow,
+        startColumn: stateStartColumn,
+        endRow: stateEndRow,
+        endColumn: stateEndColumn
+      } = this.state;
 
-      if (endRow !== row || endColumn !== column) {
+      if (stateEndRow !== endRow || stateEndColumn !== endColumn) {
         const nextRowCount =
-          startRow === null && endRow === null
+          stateStartRow === null && stateEndRow === null
             ? 0
-            : Math.abs(row - startRow) + 1;
+            : Math.abs(endRow - stateStartRow) + 1;
         const nextColumnCount =
-          startColumn === null && endColumn === null
+          stateStartColumn === null && stateEndColumn === null
             ? 0
-            : Math.abs(column - startColumn) + 1;
+            : Math.abs(endColumn - stateStartColumn) + 1;
 
         if (nextRowCount <= this.props.maxRows) {
-          this.setState({ endRow: row });
+          this.setState({ endRow });
         }
 
         if (nextColumnCount <= this.props.maxColumns) {
-          this.setState({ endColumn: column });
+          this.setState({ endColumn });
         }
       }
     }
@@ -184,6 +232,38 @@ export default class TableDragSelect extends React.Component {
     }
   };
 
+  onMouseEnter = e => {
+    if (!this.state.selectionStarted) {
+      e.preventDefault();
+      const { row, column } = eventToCellLocation(e);
+      const {
+        startRow,
+        endRow,
+        startColumn,
+        endColumn
+      } = cellLocationByGranularity({ row, column }, this.props);
+      this.setState({
+        hoverStarted: true,
+        hoverStartRow: startRow,
+        hoverEndRow: endRow,
+        hoverStartColumn: startColumn,
+        hoverEndColumn: endColumn
+      });
+      this.props.onChange(clone(this.props.value));
+    }
+  };
+
+  onMouseLeave = e => {
+    this.setState({
+      hoverStarted: false,
+      hoverStartRow: -1,
+      hoverEndRow: -1,
+      hoverStartColumn: -1,
+      hoverEndColumn: -1
+    });
+    // this.setState({ hoverStarted})
+  };
+
   isCellBeingSelected = (row, column) => {
     const minRow = Math.min(this.state.startRow, this.state.endRow);
     const maxRow = Math.max(this.state.startRow, this.state.endRow);
@@ -198,6 +278,27 @@ export default class TableDragSelect extends React.Component {
         column <= maxColumn)
     );
   };
+
+  isCellBeingHovered = (row, column) => {
+    const minRow = Math.min(this.state.hoverStartRow, this.state.hoverEndRow);
+    const maxRow = Math.max(this.state.hoverStartRow, this.state.hoverEndRow);
+    const minColumn = Math.min(
+      this.state.hoverStartColumn,
+      this.state.hoverEndColumn
+    );
+    const maxColumn = Math.max(
+      this.state.hoverStartColumn,
+      this.state.hoverEndColumn
+    );
+
+    return (
+      this.state.hoverStarted &&
+      (row >= minRow &&
+        row <= maxRow &&
+        column >= minColumn &&
+        column <= maxColumn)
+    );
+  };
 }
 
 class Cell extends React.Component {
@@ -205,7 +306,8 @@ class Cell extends React.Component {
   // cells
   shouldComponentUpdate = nextProps =>
     this.props.beingSelected !== nextProps.beingSelected ||
-    this.props.selected !== nextProps.selected;
+    this.props.selected !== nextProps.selected ||
+    this.props.hovered !== nextProps.hovered;
 
   componentDidMount = () => {
     // We need to call addEventListener ourselves so that we can pass
@@ -229,6 +331,7 @@ class Cell extends React.Component {
       disabled,
       beingSelected,
       selected,
+      hovered,
       onTouchStart,
       onTouchMove,
       ...props
@@ -243,6 +346,9 @@ class Cell extends React.Component {
       if (beingSelected) {
         className += " cell-being-selected";
       }
+      if (hovered) {
+        className += " cell-hovered";
+      }
     }
     return (
       <td
@@ -250,6 +356,8 @@ class Cell extends React.Component {
         className={className}
         onMouseDown={this.handleTouchStart}
         onMouseMove={this.handleTouchMove}
+        onMouseEnter={this.handleMouseEnter}
+        onMouseLeave={this.handleMouseLeave}
         {...props}
       >
         {this.props.children || <span>&nbsp;</span>}
@@ -266,6 +374,18 @@ class Cell extends React.Component {
   handleTouchMove = e => {
     if (!this.props.disabled) {
       this.props.onTouchMove(e);
+    }
+  };
+
+  handleMouseEnter = e => {
+    if (!this.props.disabled) {
+      this.props.onMouseEnter(e);
+    }
+  };
+
+  handleMouseLeave = e => {
+    if (!this.props.disabled) {
+      this.props.onMouseLeave(e);
     }
   };
 }
@@ -292,5 +412,48 @@ const eventToCellLocation = e => {
   return {
     row: target.parentNode.rowIndex,
     column: target.cellIndex
+  };
+};
+
+const numberByGranularity = (number, granularity, offset, max) => {
+  let start = Number(number);
+  let end = Number(number);
+  if (granularity > 1) {
+    start = Math.floor((number - offset) / granularity) * granularity + offset;
+    end = start + granularity - 1;
+    end = Math.min(end, max);
+  }
+  return { start, end };
+};
+
+const cellLocationByGranularity = (
+  { row, column },
+  {
+    granularityRows = 1,
+    granularityColumns = 1,
+    granularityRowsOffset = 0,
+    granularityColumnsOffset = 0,
+    value = []
+  }
+) => {
+  const maxRow = value.length ? value.length - 1 : 0;
+  const maxColumn = value.length ? value[0].length - 1 : 0;
+  let { start: startRow, end: endRow } = numberByGranularity(
+    row,
+    granularityRows,
+    granularityRowsOffset,
+    maxRow
+  );
+  let { start: startColumn, end: endColumn } = numberByGranularity(
+    column,
+    granularityColumns,
+    granularityColumnsOffset,
+    maxColumn
+  );
+  return {
+    startRow: startRow,
+    endRow,
+    startColumn: startColumn,
+    endColumn
   };
 };
