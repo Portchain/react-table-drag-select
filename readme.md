@@ -7,6 +7,10 @@
   - Less than 4kB when gzipped
   - Functionally and stylistically flexible
 
+This fork adds the following functionality:
+
+  - Selection granularity (select by N rows and/or columns)
+
 ## Installation
 
 ```sh

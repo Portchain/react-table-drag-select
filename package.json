@@ -1,6 +1,6 @@
 {
   "name": "react-table-drag-select",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "React component for drag selecting table cells",
   "keywords": [
     "react",
@@ -12,17 +12,22 @@
     "cell",
     "cells"
   ],
-  "url": "https://github.com/mcjohnalds/react-table-drag-select",
-  "bugs": "https://github.com/mcjohnalds/react-table-drag-select/bugs",
+  "url": "https://github.com/Portchain/react-table-drag-select",
+  "bugs": "https://github.com/Portchain/react-table-drag-select/bugs",
   "license": "MIT",
   "author": {
     "name": "John Owen",
     "email": "johnowen357@gmail.com",
     "url": "https://github.com/mcjohnalds"
   },
+  "maintainers": {
+    "name": "Christian Dannie Storgaard",
+    "email": "christian@portchain.com",
+    "url": "https://github.com/cybolic"
+  },
   "files": ["lib", "style.css"],
   "main": "lib",
-  "repository": "mcjohnalds/react-table-drag-select",
+  "repository": "Portchain/react-table-drag-select",
   "scripts": {
     "build": "babel -s true -d lib index.js && webpack",
     "dev": "webpack-dev-server",
